@@ -1,5 +1,6 @@
 services:
   relay:
+    container_name: rtsp-relay
     build:
       context: .
       dockerfile: deploy/Dockerfile
