@@ -1,0 +1,6 @@
+# Minimal MediaMTX config: accept published streams on any path.
+# The RTSP listen port is overridden at runtime by MTX_RTSPADDRESS (see entrypoint.sh).
+logLevel: info
+rtspAddress: :8554
+paths:
+  all_others:

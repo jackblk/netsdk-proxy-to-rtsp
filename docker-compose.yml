@@ -1,0 +1,13 @@
+services:
+  relay:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    env_file: .env
+    ports:
+      - "${TARGET_PORT:-8554}:${TARGET_PORT:-8554}"
+    restart: unless-stopped
+    # Override for stream mode, e.g.:
+    # command: ["stream", "--channel", "3", "--stream", "main", "--name", "cam3-main"]
+    command:
+      ["stream", "--channel", "2", "--stream", "main", "--name", "cam2-main"]

@@ -1,0 +1,21 @@
+[project]
+name = "netsdk-proxy-to-rtsp"
+version = "0.1.0"
+description = "Proxy a Dahua NetSDK live stream to RTSP without transcoding"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "python-dotenv==1.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.2.0",
+]
+
+[tool.uv]
+# Run from source; do not build/install this project itself.
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

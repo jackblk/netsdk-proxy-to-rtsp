@@ -1,0 +1,16 @@
+tmp/
+.env
+# Dahua NetSDK — proprietary, not redistributable. Ignore the SDK files and the .whl,
+# but keep the setup instructions + script tracked (see NetSDK/README.md).
+NetSDK/*
+!NetSDK/README.md
+!NetSDK/setup.sh
+__pycache__/
+*.pyc
+streams.txt
+*.dhav
+tests/fixtures/*.dhav
+!tests/fixtures/.gitkeep
+.venv/
+auto.crt
+auto.key
