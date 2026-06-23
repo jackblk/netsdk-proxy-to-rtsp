@@ -7,6 +7,27 @@ Re-publishes a Dahua NVR's NetSDK live stream as RTSP, **without transcoding**
 Dahua device ──NetSDK──▶ relay ──raw DHAV──▶ ffmpeg -f dhav -c copy ──▶ MediaMTX ──RTSP──▶ VLC / ffplay / NVR
 ```
 
+## Quick start
+The fastest path is Docker (it bundles MediaMTX + ffmpeg):
+
+```bash
+# 1. Add the NetSDK wheel into ./NetSDK/, then extract it (see NetSDK/README.md):
+./NetSDK/setup.sh
+
+# 2. Configure your device:
+cp .env.example .env          # then edit HOST / USERNAME / PASSWORD
+
+# 3. Discover which channels/streams actually work -> streams.txt (lists ready-to-paste stream arguments per channel):
+docker compose run --rm relay parse
+
+# 4. Set the channel/stream you want in docker-compose.yml (default: channel 2, main), then bring up the full stack:
+docker compose up -d
+
+# 5. View (add user:pass@ if you set RTSP auth):
+ffplay -rtsp_transport tcp rtsp://localhost:8554/cam2-main
+# or just VLC directly to rtsp://localhost:8554/cam2-main
+```
+
 ## Why?
 
 Because sometimes you don't have ONVIF or RTSP available, you only have the proprietary endpoints, and you want to use standard RTSP clients (VLC, ffplay, NVRs, etc.) without transcoding.
