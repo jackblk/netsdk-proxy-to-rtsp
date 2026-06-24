@@ -14,10 +14,10 @@ log = logging.getLogger(__name__)
 
 
 class StreamPipeline:
-    def __init__(self, rtsp_url: str, max_queue: int = 256):
+    def __init__(self, rtsp_url: str, max_queue: int = 256, publisher=None):
         self.rtsp_url = rtsp_url
         self._q: "queue.Queue[bytes]" = queue.Queue(maxsize=max_queue)
-        self._publisher = FfmpegPublisher(rtsp_url)
+        self._publisher = publisher or FfmpegPublisher(rtsp_url)
         self._worker = None
         self._stop = threading.Event()
         self._dropped = 0
@@ -47,13 +47,20 @@ class StreamPipeline:
                 data = self._q.get(timeout=0.5)
             except queue.Empty:
                 continue
-            if not self._publisher.is_alive():
-                log.warning("ffmpeg died; restarting")
-                self._publisher.start()
-            if not self._publisher.write(data):
-                log.warning("ffmpeg pipe broken; restarting")
-                self._publisher.start()
-                self._publisher.write(data)
+            self._forward(data)
+
+    def _forward(self, data):
+        # Re-check mid-iteration: once we're stopping, never restart ffmpeg —
+        # otherwise a shutdown that kills ffmpeg races the worker into reviving it.
+        if self._stop.is_set():
+            return
+        if not self._publisher.is_alive():
+            log.warning("ffmpeg died; restarting")
+            self._publisher.start()
+        if not self._publisher.write(data):
+            log.warning("ffmpeg pipe broken; restarting")
+            self._publisher.start()
+            self._publisher.write(data)
 
     def stop(self):
         self._stop.set()

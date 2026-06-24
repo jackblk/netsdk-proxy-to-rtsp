@@ -28,9 +28,14 @@ class FfmpegPublisher:
 
     def start(self):
         with self._lock:
+            # start_new_session: run ffmpeg in its own process group so a
+            # SIGINT/SIGTERM sent to the relay process (e.g. MediaMTX tearing down
+            # an on-demand stream) is NOT propagated to ffmpeg. We stop it
+            # explicitly via stop(); this prevents a shutdown-time restart race.
             self._proc = subprocess.Popen(
                 self._args(), stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL, stderr=None,
+                start_new_session=True,
             )
         log.info("ffmpeg started (dhav demuxer) -> %s", self.rtsp_url)
 
