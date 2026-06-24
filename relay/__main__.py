@@ -28,17 +28,18 @@ def _playlist_path(config_path: str) -> str:
     return os.path.join(os.path.dirname(config_path) or ".", "output.m3u8")
 
 
-def cmd_stream(cfg: Config, args):
-    pipeline = StreamPipeline(cfg.publish_url(args.name))
+def _serve_one(cfg: Config, channel: int, stream: str, name: str):
+    """Log in, stream one channel/stream to RTSP, block until SIGINT/SIGTERM, clean up."""
+    pipeline = StreamPipeline(cfg.publish_url(name))
     client = DahuaClient()
     client.init()
     client.login(cfg.host, cfg.port, cfg.username, cfg.password)
     pipeline.start()
-    client.start_realplay(args.channel, STREAM_TYPES[args.stream], pipeline.on_raw)
     # cleanup() stops all sessions on shutdown, so the handle isn't tracked here.
-    log.info("Streaming ch%s %s (RTSP auth %s)", args.channel, args.stream,
+    client.start_realplay(channel, STREAM_TYPES[stream], pipeline.on_raw)
+    log.info("Streaming ch%s %s (RTSP auth %s)", channel, stream,
              "enabled" if cfg.rtsp_auth_enabled else "disabled")
-    log.info("Stream ready — view at: %s", cfg.viewer_url(args.name))
+    log.info("Stream ready — view at: %s", cfg.viewer_url(name))
 
     stop = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -50,12 +51,56 @@ def cmd_stream(cfg: Config, args):
     client.cleanup()
 
 
+def cmd_stream(cfg: Config, args):
+    _serve_one(cfg, args.channel, args.stream, args.name)
+
+
+def cmd_serve(cfg: Config, args) -> int:
+    entries = streams_config.load(args.config)
+    try:
+        entry = streams_config.find_enabled(entries, args.name)
+    except LookupError as e:
+        log.error("serve: %s (in %s)", e, args.config)
+        return 1
+    _serve_one(cfg, entry.channel, entry.stream, entry.name)
+    return 0
+
+
+def _run_on_demand(cfg: Config, args, entries) -> int:
+    """On-demand mode: MediaMTX runOnDemand starts streams on view. Here we only
+    write the playlist (all enabled streams) and idle as the foreground process."""
+    enabled = [e for e in entries if e.enable]
+    playlist_path = _playlist_path(args.config)
+    parent = os.path.dirname(playlist_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    items = [(e.name, cfg.viewer_url(e.name)) for e in enabled]
+    with open(playlist_path, "w") as f:
+        f.write(build_m3u8(items))
+    log.info("On-demand mode: %d stream(s) will start when first viewed. "
+             "Playlist written to %s.", len(enabled), playlist_path)
+    for e in enabled:
+        log.info("  on-demand %s -> %s", e.name, cfg.viewer_url(e.name))
+
+    stop = threading.Event()
+    signal.signal(signal.SIGINT, lambda *_: stop.set())
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    while not stop.is_set():
+        time.sleep(0.5)
+    log.info("Shutting down...")
+    return 0
+
+
 def cmd_run(cfg: Config, args) -> int:
     entries = streams_config.load(args.config)
     if not any(e.enable for e in entries):
         log.error("No enabled streams in %s — nothing to do. Run `relay parse` first.",
                   args.config)
         return 1
+
+    if cfg.on_demand:
+        return _run_on_demand(cfg, args, entries)
+
     manager = StreamManager(cfg, entries)
     manager.start()
     log.info("Running %d stream(s) (RTSP auth %s)", manager.active_count,
@@ -116,6 +161,10 @@ def main():
     s.add_argument("--stream", choices=STREAM_TYPES, default="main")
     s.add_argument("--name", required=True, help="RTSP path name")
 
+    sv = sub.add_parser("serve", help="serve one stream by name (used by MediaMTX runOnDemand)")
+    sv.add_argument("name", help="RTSP path name (matches a stream in the config)")
+    sv.add_argument("--config", default=DEFAULT_CONFIG)
+
     p = sub.add_parser("parse", help="probe channels/streams -> merge into streams.yml")
     p.add_argument("--config", default=DEFAULT_CONFIG)
     p.add_argument("--streams", default="main,sub")
@@ -128,6 +177,8 @@ def main():
     if args.cmd == "stream":
         cmd_stream(cfg, args)
         rc = 0
+    elif args.cmd == "serve":
+        rc = cmd_serve(cfg, args)
     elif args.cmd == "run":
         rc = cmd_run(cfg, args)
     else:
