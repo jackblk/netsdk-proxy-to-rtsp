@@ -1,7 +1,31 @@
+import pytest
+
 import relay  # noqa: F401  (path bootstrap)
 from types import SimpleNamespace
 
-from relay.streams_config import StreamEntry, load, merge, save
+from relay.streams_config import StreamEntry, find_enabled, load, merge, save
+
+
+def _enabled_fixture():
+    return [
+        StreamEntry(channel=3, stream="main", name="cam3-main", enable=True),
+        StreamEntry(channel=3, stream="sub", name="cam3-sub", enable=False),
+    ]
+
+
+def test_find_enabled_returns_matching_entry():
+    e = find_enabled(_enabled_fixture(), "cam3-main")
+    assert e.channel == 3 and e.stream == "main"
+
+
+def test_find_enabled_missing_name_raises():
+    with pytest.raises(LookupError):
+        find_enabled(_enabled_fixture(), "nope")
+
+
+def test_find_enabled_disabled_entry_raises():
+    with pytest.raises(LookupError):
+        find_enabled(_enabled_fixture(), "cam3-sub")
 
 
 def _r(channel, stream, ok, codec=None, width=0, height=0):

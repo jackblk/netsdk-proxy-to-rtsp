@@ -49,6 +49,16 @@ def load(path: str) -> List[StreamEntry]:
     return out
 
 
+def find_enabled(entries: List[StreamEntry], name: str) -> StreamEntry:
+    """Return the enabled entry with this name, or raise LookupError."""
+    for e in entries:
+        if e.name == name:
+            if not e.enable:
+                raise LookupError(f"stream {name!r} is disabled")
+            return e
+    raise LookupError(f"no stream named {name!r}")
+
+
 def _to_dict(e: StreamEntry) -> dict:
     d = {"channel": e.channel, "stream": e.stream, "name": e.name, "enable": e.enable}
     if e.metadata:
