@@ -53,6 +53,21 @@ def test_urls_with_auth_embed_credentials():
     assert cfg.viewer_url("cam") == "rtsp://bb:121124@1.2.3.4:8554/cam"
 
 
+def test_viewer_url_substitutes_localhost_for_bind_all_host():
+    # 0.0.0.0 is a bind/advertise address, not connectable by a player.
+    cfg = Config.from_env({"HOST": "h", "USERNAME": "u", "PASSWORD": "p",
+                           "TARGET_HOST": "0.0.0.0", "TARGET_PORT": "8100"})
+    assert cfg.viewer_url("cam2-main") == "rtsp://localhost:8100/cam2-main"
+    # publish stays on loopback regardless.
+    assert cfg.publish_url("cam2-main") == "rtsp://127.0.0.1:8100/cam2-main"
+
+
+def test_viewer_url_keeps_real_host():
+    cfg = Config.from_env({"HOST": "h", "USERNAME": "u", "PASSWORD": "p",
+                           "TARGET_HOST": "cam.example.tv", "TARGET_PORT": "8554"})
+    assert cfg.viewer_url("cam") == "rtsp://cam.example.tv:8554/cam"
+
+
 def test_url_credentials_are_url_encoded():
     cfg = Config.from_env({"HOST": "h", "USERNAME": "u", "PASSWORD": "p",
                            "TARGET_USERNAME": "a@b", "TARGET_PASSWORD": "p:s/w@rd"})

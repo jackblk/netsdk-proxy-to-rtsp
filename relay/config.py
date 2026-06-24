@@ -51,6 +51,14 @@ class Config:
         # a valid connect target, so it must not be used here.
         return f"rtsp://{self._userinfo()}127.0.0.1:{self.target_port}/{name}"
 
+    @property
+    def viewer_host(self) -> str:
+        # target_host doubles as MediaMTX's bind address. Bind-all addresses
+        # (0.0.0.0 / ::) aren't connectable by a player, so advertise localhost.
+        if self.target_host in ("0.0.0.0", "::", ""):
+            return "localhost"
+        return self.target_host
+
     def viewer_url(self, name: str) -> str:
         # Where clients CONNECT to watch: the advertised host/port.
-        return f"rtsp://{self._userinfo()}{self.target_host}:{self.target_port}/{name}"
+        return f"rtsp://{self._userinfo()}{self.viewer_host}:{self.target_port}/{name}"
