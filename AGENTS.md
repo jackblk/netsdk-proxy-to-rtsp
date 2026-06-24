@@ -21,8 +21,11 @@ Dahua device ──NetSDK──▶ relay ──raw DHAV──▶ ffmpeg -f dhav 
   - [dhav.py](relay/dhav.py) — pure `DhavParser`: DHAV frames → `(codec, annexb_nal)`; codec + resolution detection. **Used only by `parse` mode** (not the streaming path). Fully unit-tested; no SDK/ffmpeg deps.
   - [publisher.py](relay/publisher.py) — `FfmpegPublisher`: spawns/monitors/restarts `ffmpeg -f dhav -c copy` (codec-agnostic; ffmpeg detects it).
   - [pipeline.py](relay/pipeline.py) — wires callback → bounded queue → ffmpeg (forwards raw DHAV bytes; backpressure: drop-oldest).
-  - [probe.py](relay/probe.py) — `parse` mode: probe channels×streams, format `streams.txt`.
-  - [__main__.py](relay/__main__.py) — CLI: `stream` and `parse` subcommands, signal handling.
+  - [manager.py](relay/manager.py) — `StreamManager`: the `run` daemon. One login, N concurrent `StreamPipeline`s (one ffmpeg each), always-on; a per-stream start failure is logged and skipped.
+  - [streams_config.py](relay/streams_config.py) — pure `StreamEntry` + `load`/`save`/`merge` for `streams.yml`. No SDK/ffmpeg deps; `merge` is non-destructive (see Commands). Unit-tested.
+  - [mediamtx_config.py](relay/mediamtx_config.py) — pure `build()` + CLI that generates the runtime MediaMTX config (rtspAddress + optional auth) via PyYAML. No SDK deps; used by the entrypoint.
+  - [probe.py](relay/probe.py) — `parse` mode: probe channels×streams → `ProbeResult`s (merged into `streams.yml` by `streams_config`).
+  - [__main__.py](relay/__main__.py) — CLI: `run`, `stream`, and `parse` subcommands, signal handling.
 - `NetSDK/` — Dahua SDK (Python ctypes bindings + `Libs/linux64/*.so`). **Proprietary,
   NOT committed** (only its `README.md` + `setup.sh` are tracked; SDK files are git-ignored).
   Setup instructions live in [NetSDK/README.md](NetSDK/README.md). Do not edit the SDK.
@@ -37,11 +40,17 @@ Uses **uv** (not pip/requirements.txt). Run Python through `uv run` (or the venv
 
 ```bash
 uv sync                                   # install deps
-uv run pytest -q                          # run tests (14, all should pass)
-uv run python -m relay parse              # discover working streams -> streams.txt
-uv run python -m relay stream --channel 3 --stream main --name cam3-main
-docker compose up --build                 # full stack (compose is at repo root)
+uv run pytest -q                          # run tests (all should pass)
+uv run python -m relay parse              # probe channels/streams -> merge into streams.yml
+uv run python -m relay run                # publish every enabled stream in streams.yml
+uv run python -m relay stream --channel 3 --stream main --name cam3-main  # one ad-hoc stream
+docker compose up --build                 # full stack (compose is at repo root; runs `run`)
 ```
+
+`parse` is **non-destructive**: it adds newly-discovered streams, sets `enable: false` on
+ones it can't validate, and refreshes `metadata` (codec/resolution) — but never overwrites a
+user's `name` or their `enable` choice on a still-valid stream. Stream identity is
+`(channel, stream)`. Comments in `streams.yml` are dropped on rewrite (PyYAML round-trip).
 
 Config comes from `.env` (git-ignored): `HOST`, `HOST_PORT`, `USERNAME`, `PASSWORD`,
 `TARGET_HOST`, `TARGET_PORT`. `TARGET_PORT` is the single RTSP port (MediaMTX listen +
@@ -78,8 +87,10 @@ in its publish/viewer URLs (`Config.publish_url`/`viewer_url`). Unset → open a
 
 ## Conventions
 
-- TDD for pure logic (config, DHAV parser, streams.txt formatting). SDK/ffmpeg/end-to-end are
-  validated by running against a live device (channel 3 is the known-good test channel).
-- Keep `relay/` modules small and single-purpose; `dhav.py` stays free of SDK/ffmpeg imports.
-- Scratch/experiment scripts go in `tmp/` (git-ignored). `.dhav` captures and `streams.txt`
-  are git-ignored (except the committed test fixture).
+- TDD for pure logic (config, DHAV parser, `streams_config` load/save/merge, `mediamtx_config`
+  build). SDK/ffmpeg/end-to-end are validated by running against a live device (channel 3 is
+  the known-good test channel).
+- Keep `relay/` modules small and single-purpose; `dhav.py`, `streams_config.py`, and
+  `mediamtx_config.py` stay free of SDK/ffmpeg imports.
+- Scratch/experiment scripts go in `tmp/` (git-ignored). `.dhav` captures, `streams.txt`, and
+  `streams.yml` are git-ignored (except the committed test fixture).

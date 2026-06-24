@@ -17,15 +17,18 @@ The fastest path is Docker (it bundles MediaMTX + ffmpeg):
 # 2. Configure your device:
 cp .env.example .env          # then edit HOST / USERNAME / PASSWORD
 
-# 3. Discover which channels/streams actually work -> streams.txt (lists ready-to-paste stream arguments per channel):
+# 3. Discover which channels/streams work -> generates/updates streams.yml
+#    (one entry per channel×stream; valid ones enable: true). This also creates
+#    the ./streams.yml that step 4 mounts into the container.
 docker compose run --rm relay parse
 
-# 4. Set the channel/stream you want in docker-compose.yml (default: channel 2, main), then bring up the full stack:
+# 4. Edit streams.yml — enable the streams you want and rename RTSP paths to taste —
+#    then bring up the full stack (publishes every enabled stream):
 docker compose up -d
 
 # 5. View (add user:pass@ if you set RTSP auth):
-ffplay -rtsp_transport tcp rtsp://localhost:8554/cam2-main
-# or just VLC directly to rtsp://localhost:8554/cam2-main
+ffplay -rtsp_transport tcp rtsp://localhost:8554/cam3-main
+# or just VLC directly to rtsp://localhost:8554/cam3-main
 ```
 
 ## Why?
@@ -68,11 +71,14 @@ Requires `uv`, `ffmpeg`, and `mediamtx` on PATH.
 ```bash
 uv sync
 
-# 1. Discover which channels/streams actually work -> streams.txt
+# 1. Discover which channels/streams work -> generates/updates streams.yml
 uv run python -m relay parse
 
-# 2. Start the RTSP server (separate shell), then stream one of them:
+# 2. Start the RTSP server (separate shell), then run every enabled stream:
 mediamtx deploy/mediamtx.yml
+uv run python -m relay run            # reads streams.yml (default)
+
+# (or serve a single ad-hoc stream without a config file:)
 uv run python -m relay stream --channel 3 --stream main --name cam3-main
 
 # 3. View (add user:pass@ if RTSP auth is enabled):
@@ -81,21 +87,25 @@ ffplay -rtsp_transport tcp rtsp://127.0.0.1:8554/cam3-main
 
 ## Docker
 ```bash
-docker compose up --build        # runs the command in docker-compose.yml
+docker compose up --build        # runs `relay run` against the mounted streams.yml
 # View (add user:pass@ if RTSP auth is enabled):
 ffplay -rtsp_transport tcp rtsp://<host>:8554/cam3-main
 ```
 
-Run `parse` mode in Docker instead:
+Run `parse` mode in Docker instead (writes to the mounted ./streams.yml):
 ```bash
 docker compose run --rm relay parse
 ```
 
 ## Modes
-- `parse` — probes every channel × stream type briefly, detects codec/resolution,
-  and writes `streams.txt` with ready-to-paste `stream`-mode arguments.
-- `stream --channel N --stream main|sub|sub2 --name <path>` — serves that one
-  channel/stream at `rtsp://<TARGET_HOST>:<TARGET_PORT>/<path>`.
+- `parse [--config streams.yml]` — probes every channel × stream type briefly,
+  detects codec/resolution, and **non-destructively merges** results into
+  `streams.yml`: adds newly-found streams, marks invalid ones `enable: false`, and
+  leaves your hand-edits (renamed paths, manual enable/disable) intact.
+- `run [--config streams.yml]` — logs in once and publishes **every `enable: true`
+  stream** in the config, each at `rtsp://<TARGET_HOST>:<TARGET_PORT>/<name>`.
+- `stream --channel N --stream main|sub|sub2 --name <path>` — serves one ad-hoc
+  channel/stream without a config file.
 
 ## License
 This project's own code is licensed under the [MIT License](LICENSE). It does **not**
