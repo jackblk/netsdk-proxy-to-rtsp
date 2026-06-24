@@ -59,6 +59,19 @@ def test_load_missing_file_returns_empty(tmp_path):
     assert load(str(tmp_path / "nope.yml")) == []
 
 
+def test_load_invalid_yaml_returns_empty(tmp_path):
+    # Reproduces the crash report: a file that isn't valid YAML must not raise.
+    p = tmp_path / "streams.yml"
+    p.write_text("streams:\n  - channel: 3\nthis is : : not valid\n")
+    assert load(str(p)) == []
+
+
+def test_load_non_mapping_returns_empty(tmp_path):
+    p = tmp_path / "streams.yml"
+    p.write_text("- just\n- a\n- list\n")
+    assert load(str(p)) == []
+
+
 def test_save_omits_empty_metadata(tmp_path):
     p = tmp_path / "streams.yml"
     save(str(p), [StreamEntry(channel=1, stream="main", name="cam1-main")])

@@ -1,8 +1,11 @@
 """Load/save/merge the editable streams.yml (pure; no SDK/ffmpeg imports)."""
+import logging
 from dataclasses import dataclass, field
 from typing import List
 
 import yaml
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -15,17 +18,30 @@ class StreamEntry:
 
 
 def load(path: str) -> List[StreamEntry]:
+    """Read streams.yml. A missing or unparseable file yields []; for `parse`
+    that means it gets regenerated/overwritten rather than crashing."""
     try:
         with open(path) as f:
-            data = yaml.safe_load(f) or {}
+            data = yaml.safe_load(f)
     except FileNotFoundError:
+        return []
+    except yaml.YAMLError as e:
+        log.warning("%s is not valid YAML (%s); treating as empty — `parse` will overwrite it.",
+                    path, e.__class__.__name__)
+        return []
+    if not isinstance(data, dict):
+        if data is not None:
+            log.warning("%s is not a mapping; treating as empty.", path)
         return []
     out = []
     for item in (data.get("streams") or []):
+        if not isinstance(item, dict) or "channel" not in item or "stream" not in item:
+            log.warning("skipping malformed stream entry in %s: %r", path, item)
+            continue
         out.append(StreamEntry(
             channel=item["channel"],
             stream=item["stream"],
-            name=item["name"],
+            name=item.get("name") or f"cam{item['channel']}-{item['stream']}",
             enable=item.get("enable", True),
             metadata=item.get("metadata") or {},
         ))
