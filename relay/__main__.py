@@ -14,7 +14,7 @@ from relay import streams_config
 from relay.config import Config, STREAM_TYPES
 from relay.manager import StreamManager
 from relay.pipeline import StreamPipeline
-from relay.probe import probe_stream
+from relay.probe import probe_streams
 from relay.sdk_client import DahuaClient
 
 log = logging.getLogger(__name__)
@@ -70,11 +70,9 @@ def cmd_parse(cfg: Config, args) -> int:
     channels = (range(args.channels) if args.channels
                 else range(client.channel_count))
     stream_names = args.streams.split(",")
-    results = []
-    for ch in channels:
-        for st in stream_names:
-            log.info("Probing ch%s %s...", ch, st)
-            results.append(probe_stream(client, ch, st, args.probe_seconds))
+    pairs = [(ch, st) for ch in channels for st in stream_names]
+    log.info("Probing %d stream(s) at concurrency %d...", len(pairs), args.probe_concurrency)
+    results = probe_streams(client, pairs, args.probe_seconds, args.probe_concurrency)
     client.cleanup()
     existing = streams_config.load(args.config)
     merged = streams_config.merge(existing, results)
@@ -105,6 +103,8 @@ def main():
     p.add_argument("--streams", default="main,sub")
     p.add_argument("--channels", type=int, default=0, help="0 = use device channel count")
     p.add_argument("--probe-seconds", type=float, default=3.0)
+    p.add_argument("--probe-concurrency", type=int, default=4,
+                   help="how many streams to probe at once (default 4)")
 
     args = ap.parse_args()
     if args.cmd == "stream":
