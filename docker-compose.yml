@@ -9,9 +9,10 @@ services:
     ports:
       - "${TARGET_PORT:-8554}:${TARGET_PORT:-8554}"
     volumes:
-      # Host-editable stream config. Must exist before `up` (run `relay parse`
-      # or `touch streams.yml`) or Docker will create a directory here.
-      - ./streams.yml:/app/streams.yml
+      # Host-editable runtime config (streams.yml + generated output.m3u8).
+      # Mounting the directory avoids the "Docker creates an empty dir" footgun
+      # of bind-mounting a not-yet-existing file.
+      - ./config:/app/config
     restart: unless-stopped
     command: ["run"]
     # One-off single stream instead of the config-driven daemon:

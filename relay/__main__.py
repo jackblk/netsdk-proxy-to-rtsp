@@ -14,10 +14,18 @@ from relay import streams_config
 from relay.config import Config, STREAM_TYPES
 from relay.manager import StreamManager
 from relay.pipeline import StreamPipeline
+from relay.playlist import build_m3u8
 from relay.probe import probe_streams
 from relay.sdk_client import DahuaClient
 
 log = logging.getLogger(__name__)
+
+DEFAULT_CONFIG = "config/streams.yml"
+
+
+def _playlist_path(config_path: str) -> str:
+    """output.m3u8 next to the config file."""
+    return os.path.join(os.path.dirname(config_path) or ".", "output.m3u8")
 
 
 def cmd_stream(cfg: Config, args):
@@ -52,6 +60,16 @@ def cmd_run(cfg: Config, args) -> int:
     manager.start()
     log.info("Running %d stream(s) (RTSP auth %s)", manager.active_count,
              "enabled" if cfg.rtsp_auth_enabled else "disabled")
+
+    playlist_path = _playlist_path(args.config)
+    parent = os.path.dirname(playlist_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    items = [(e.name, cfg.viewer_url(e.name)) for e in manager.started]
+    with open(playlist_path, "w") as f:
+        f.write(build_m3u8(items))
+    log.info("Playlist written to %s — open it in VLC to view all %d stream(s).",
+             playlist_path, len(items))
 
     stop = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -91,7 +109,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     r = sub.add_parser("run", help="run all enabled streams from a config file")
-    r.add_argument("--config", default="streams.yml")
+    r.add_argument("--config", default=DEFAULT_CONFIG)
 
     s = sub.add_parser("stream", help="stream one channel/stream to RTSP")
     s.add_argument("--channel", type=int, required=True)
@@ -99,7 +117,7 @@ def main():
     s.add_argument("--name", required=True, help="RTSP path name")
 
     p = sub.add_parser("parse", help="probe channels/streams -> merge into streams.yml")
-    p.add_argument("--config", default="streams.yml")
+    p.add_argument("--config", default=DEFAULT_CONFIG)
     p.add_argument("--streams", default="main,sub")
     p.add_argument("--channels", type=int, default=0, help="0 = use device channel count")
     p.add_argument("--probe-seconds", type=float, default=3.0)

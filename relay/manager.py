@@ -15,11 +15,16 @@ class StreamManager:
         self.cfg = cfg
         self._entries = [e for e in entries if e.enable]
         self._client = DahuaClient()
-        self._sessions = []  # list[(handle, StreamPipeline)]
+        self._sessions = []  # list[(handle, StreamPipeline, StreamEntry)]
 
     @property
     def active_count(self) -> int:
         return len(self._sessions)
+
+    @property
+    def started(self) -> List[StreamEntry]:
+        """The entries whose RealPlay session started successfully."""
+        return [entry for _, _, entry in self._sessions]
 
     def start(self):
         self._client.init()
@@ -35,12 +40,12 @@ class StreamManager:
                 log.exception("ch%s %s: failed to start; skipping", e.channel, e.stream)
                 pipeline.stop()
                 continue
-            self._sessions.append((handle, pipeline))
+            self._sessions.append((handle, pipeline, e))
             log.info("streaming ch%s %s -> %s", e.channel, e.stream,
                      self.cfg.viewer_url(e.name))
 
     def stop(self):
-        for handle, pipeline in self._sessions:
+        for handle, pipeline, _ in self._sessions:
             self._client.stop_realplay(handle)
             pipeline.stop()
         self._sessions.clear()

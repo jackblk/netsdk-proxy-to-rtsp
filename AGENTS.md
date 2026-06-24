@@ -24,6 +24,7 @@ Dahua device ──NetSDK──▶ relay ──raw DHAV──▶ ffmpeg -f dhav 
   - [manager.py](relay/manager.py) — `StreamManager`: the `run` daemon. One login, N concurrent `StreamPipeline`s (one ffmpeg each), always-on; a per-stream start failure is logged and skipped.
   - [streams_config.py](relay/streams_config.py) — pure `StreamEntry` + `load`/`save`/`merge` for `streams.yml`. No SDK/ffmpeg deps; `merge` is non-destructive (see Commands). Unit-tested.
   - [mediamtx_config.py](relay/mediamtx_config.py) — pure `build()` + CLI that generates the runtime MediaMTX config (rtspAddress + optional auth) via PyYAML. No SDK deps; used by the entrypoint.
+  - [playlist.py](relay/playlist.py) — pure `build_m3u8()`: (name, url) pairs → M3U8 text. `run` writes `output.m3u8` (next to the config) so a player opens all streams at once.
   - [probe.py](relay/probe.py) — `parse` mode: probe channels×streams → `ProbeResult`s (merged into `streams.yml` by `streams_config`).
   - [__main__.py](relay/__main__.py) — CLI: `run`, `stream`, and `parse` subcommands, signal handling.
 - `NetSDK/` — Dahua SDK (Python ctypes bindings + `Libs/linux64/*.so`). **Proprietary,
@@ -41,8 +42,8 @@ Uses **uv** (not pip/requirements.txt). Run Python through `uv run` (or the venv
 ```bash
 uv sync                                   # install deps
 uv run pytest -q                          # run tests (all should pass)
-uv run python -m relay parse              # probe channels/streams -> merge into streams.yml
-uv run python -m relay run                # publish every enabled stream in streams.yml
+uv run python -m relay parse              # probe -> merge into config/streams.yml (concurrent)
+uv run python -m relay run                # publish enabled streams + write config/output.m3u8
 uv run python -m relay stream --channel 3 --stream main --name cam3-main  # one ad-hoc stream
 docker compose up --build                 # full stack (compose is at repo root; runs `run`)
 ```
@@ -51,6 +52,12 @@ docker compose up --build                 # full stack (compose is at repo root;
 ones it can't validate, and refreshes `metadata` (codec/resolution) — but never overwrites a
 user's `name` or their `enable` choice on a still-valid stream. Stream identity is
 `(channel, stream)`. Comments in `streams.yml` are dropped on rewrite (PyYAML round-trip).
+
+Runtime config lives in [config/](config/) (default `--config config/streams.yml`), which
+docker-compose bind-mounts (`./config:/app/config`). Mounting the **directory** (not the
+file) avoids Docker creating an empty dir when `streams.yml` doesn't exist yet. Only
+`config/README.md` is committed; `streams.yml` + `output.m3u8` are git-ignored
+([config/.gitignore](config/.gitignore)).
 
 Config comes from `.env` (git-ignored): `HOST`, `HOST_PORT`, `USERNAME`, `PASSWORD`,
 `TARGET_HOST`, `TARGET_PORT`. `TARGET_PORT` is the single RTSP port (MediaMTX listen +
@@ -84,6 +91,10 @@ in its publish/viewer URLs (`Config.publish_url`/`viewer_url`). Unset → open a
   project root on `sys.path` so `from NetSDK.NetSDK import NetClient` resolves.
 - **Process-tree footgun when testing**: `pkill -f "relay stream"` also matches the shell
   running it — don't. Target exact pids.
+- **Viewer URL vs. bind address**: `TARGET_HOST` is MediaMTX's bind/advertise address, so
+  it's usually `0.0.0.0` — which a player can't connect to. `Config.viewer_host` therefore
+  rewrites `0.0.0.0`/`::`/`""` to `localhost` for logged viewer URLs and `output.m3u8`
+  (publish URLs always stay on `127.0.0.1`). Set a real `TARGET_HOST` for remote viewing.
 
 ## Conventions
 
@@ -93,4 +104,5 @@ in its publish/viewer URLs (`Config.publish_url`/`viewer_url`). Unset → open a
 - Keep `relay/` modules small and single-purpose; `dhav.py`, `streams_config.py`, and
   `mediamtx_config.py` stay free of SDK/ffmpeg imports.
 - Scratch/experiment scripts go in `tmp/` (git-ignored). `.dhav` captures, `streams.txt`, and
-  `streams.yml` are git-ignored (except the committed test fixture).
+  the generated `config/streams.yml` + `config/output.m3u8` are git-ignored (except the
+  committed test fixture and `config/README.md`).

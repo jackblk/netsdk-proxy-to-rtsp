@@ -17,18 +17,18 @@ The fastest path is Docker (it bundles MediaMTX + ffmpeg):
 # 2. Configure your device:
 cp .env.example .env          # then edit HOST / USERNAME / PASSWORD
 
-# 3. Discover which channels/streams work -> generates/updates streams.yml
-#    (one entry per channel×stream; valid ones enable: true). This also creates
-#    the ./streams.yml that step 4 mounts into the container.
+# 3. Discover which channels/streams work -> generates/updates config/streams.yml
+#    (one entry per channel×stream; valid ones enable: true).
 docker compose run --rm relay parse
 
-# 4. Edit streams.yml — enable the streams you want and rename RTSP paths to taste —
-#    then bring up the full stack (publishes every enabled stream):
+# 4. Edit config/streams.yml — enable the streams you want and rename RTSP paths
+#    to taste — then bring up the full stack (publishes every enabled stream):
 docker compose up -d
 
-# 5. View (add user:pass@ if you set RTSP auth):
+# 5. View: open the generated playlist (all enabled streams at once) in VLC:
+vlc config/output.m3u8
+# or a single stream (add user:pass@ if you set RTSP auth):
 ffplay -rtsp_transport tcp rtsp://localhost:8554/cam3-main
-# or just VLC directly to rtsp://localhost:8554/cam3-main
 ```
 
 ## Why?
@@ -76,12 +76,13 @@ uv run python -m relay parse
 
 # 2. Start the RTSP server (separate shell), then run every enabled stream:
 mediamtx deploy/mediamtx.yml
-uv run python -m relay run            # reads streams.yml (default)
+uv run python -m relay run            # reads config/streams.yml (default)
 
 # (or serve a single ad-hoc stream without a config file:)
 uv run python -m relay stream --channel 3 --stream main --name cam3-main
 
-# 3. View (add user:pass@ if RTSP auth is enabled):
+# 3. View — open the generated playlist, or a single stream:
+vlc config/output.m3u8
 ffplay -rtsp_transport tcp rtsp://127.0.0.1:8554/cam3-main
 ```
 
@@ -92,18 +93,24 @@ docker compose up --build        # runs `relay run` against the mounted streams.
 ffplay -rtsp_transport tcp rtsp://<host>:8554/cam3-main
 ```
 
-Run `parse` mode in Docker instead (writes to the mounted ./streams.yml):
+Run `parse` mode in Docker instead (writes to the mounted ./config/streams.yml):
 ```bash
 docker compose run --rm relay parse
 ```
 
+The `./config` directory is bind-mounted into the container, so `config/streams.yml`
+and `config/output.m3u8` are editable/viewable on the host. Only `config/README.md`
+is committed; the generated files are git-ignored.
+
 ## Modes
-- `parse [--config streams.yml]` — probes every channel × stream type briefly,
-  detects codec/resolution, and **non-destructively merges** results into
-  `streams.yml`: adds newly-found streams, marks invalid ones `enable: false`, and
-  leaves your hand-edits (renamed paths, manual enable/disable) intact.
-- `run [--config streams.yml]` — logs in once and publishes **every `enable: true`
-  stream** in the config, each at `rtsp://<TARGET_HOST>:<TARGET_PORT>/<name>`.
+- `parse [--config config/streams.yml] [--probe-concurrency 4]` — probes every
+  channel × stream type briefly (concurrently, in batches), detects codec/resolution,
+  and **non-destructively merges** results into `streams.yml`: adds newly-found
+  streams, marks invalid ones `enable: false`, and leaves your hand-edits (renamed
+  paths, manual enable/disable) intact. An unparseable `streams.yml` is regenerated.
+- `run [--config config/streams.yml]` — logs in once and publishes **every
+  `enable: true` stream** in the config, each at `rtsp://<host>:<TARGET_PORT>/<name>`,
+  and writes `output.m3u8` (a playlist of all published streams) next to the config.
 - `stream --channel N --stream main|sub|sub2 --name <path>` — serves one ad-hoc
   channel/stream without a config file.
 

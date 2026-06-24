@@ -1,5 +1,6 @@
 """Load/save/merge the editable streams.yml (pure; no SDK/ffmpeg imports)."""
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import List
 
@@ -56,6 +57,9 @@ def _to_dict(e: StreamEntry) -> dict:
 
 
 def save(path: str, entries: List[StreamEntry]) -> None:
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     data = {"streams": [_to_dict(e) for e in entries]}
     with open(path, "w") as f:
         yaml.safe_dump(data, f, sort_keys=False, default_flow_style=False)

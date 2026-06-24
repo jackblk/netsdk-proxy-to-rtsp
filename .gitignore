@@ -10,6 +10,7 @@ __pycache__/
 streams.txt
 streams.yml
 *.dhav
+# Runtime config dir: keep the README, ignore generated files (see config/.gitignore).
 tests/fixtures/*.dhav
 !tests/fixtures/.gitkeep
 .venv/
