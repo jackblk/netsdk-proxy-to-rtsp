@@ -1,6 +1,7 @@
 services:
   relay:
     container_name: rtsp-relay
+    pull_policy: build
     build:
       context: .
       dockerfile: deploy/Dockerfile
