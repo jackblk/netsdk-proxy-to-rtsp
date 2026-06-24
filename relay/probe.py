@@ -1,8 +1,8 @@
-"""parse mode: probe channels x stream types and emit copy-paste stream args."""
+"""parse mode: probe channels x stream types and detect codec/resolution."""
 import logging
 import threading
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 
 from relay.config import STREAM_TYPES
 from relay.dhav import DhavParser
@@ -19,29 +19,6 @@ class ProbeResult:
     codec: Optional[str]
     width: int
     height: int
-
-
-def _codec_label(codec: Optional[str]) -> str:
-    return {"h264": "H.264", "h265": "H.265"}.get(codec or "", "?")
-
-
-def format_streams_txt(results: List[ProbeResult], source: str = "") -> str:
-    header = []
-    if source:
-        header.append(f"# Source: {source}")
-    working = [r for r in results if r.ok]
-    if not working:
-        header.append("# No working streams found.")
-        return "\n".join(header) + "\n"
-    header.append("# Working streams (copy a full line below as `relay` arguments).")
-    header.append("")
-    lines = header
-    for r in working:
-        res = f"{r.width}x{r.height}" if r.width else "?"
-        lines.append(f"# ch{r.channel} {r.stream}\t{_codec_label(r.codec)} {res}")
-        lines.append(f"stream --channel {r.channel} --stream {r.stream} --name cam{r.channel}-{r.stream}")
-        lines.append("")
-    return "\n".join(lines)
 
 
 def probe_stream(client: DahuaClient, channel: int, stream: str, seconds: float) -> ProbeResult:
