@@ -128,6 +128,23 @@ to `metadata.codec` / `metadata.resolution`. Uses the new handle-based
   `merge` → `save`. Drop `streams.txt` output.
 - `stream` subcommand unchanged in behavior.
 
+### `relay/mediamtx_config.py` (new — runtime MediaMTX config generator)
+
+Now that PyYAML is available, replace the fragile shell heredoc + manual single-quote
+escaping in `entrypoint.sh` with proper YAML generation:
+
+- `build(base: dict, port: int, username: str, password: str) -> dict` — pure function.
+  Sets `rtspAddress = f":{port}"`; when **both** creds are non-empty, injects the
+  `authInternalUsers` block (publish+read user, plus the localhost `any` user for
+  api/metrics/pprof) as native Python data — special characters in creds need no
+  escaping. Leaves the base untouched when creds are absent (open access).
+- `python -m relay.mediamtx_config --base <path> --out <path>` — CLI wrapper: load base
+  YAML, read `TARGET_PORT`/`TARGET_USERNAME`/`TARGET_PASSWORD` from env, `yaml.safe_dump`
+  the result.
+
+This makes the auth block testable (pure `build`) and removes the `MTX_RTSPADDRESS` env
+indirection (`rtspAddress` is written directly into the generated file).
+
 ### Dependency
 
 - `pyproject.toml`: `pyyaml` already added and `uv sync`'d by the maintainer — no action.
@@ -145,7 +162,11 @@ to `metadata.codec` / `metadata.resolution`. Uses the new handle-based
   - **Footgun to document:** the host `./streams.yml` must exist before `up`, or Docker
     creates a *directory* at the mount point. Generate it first with `relay parse`
     (or `touch streams.yml`).
-- `deploy/entrypoint.sh`: **no change** — it already forwards `"$@"` to `python -m relay`.
+- `deploy/entrypoint.sh`: **simplified** — drop the `cp`, the `authInternalUsers` heredoc,
+  and the `MTX_RTSPADDRESS` export; replace with a single
+  `python -m relay.mediamtx_config --base deploy/mediamtx.yml --out /tmp/mediamtx.runtime.yml`
+  call, then start MediaMTX against the generated file. Still forwards `"$@"` to
+  `python -m relay`.
 - `deploy/mediamtx.yml`: **no change** — MediaMTX auto-creates paths on publish, and the
   existing optional auth block already governs all paths.
 
@@ -162,7 +183,8 @@ to `metadata.codec` / `metadata.resolution`. Uses the new handle-based
 
 - **TDD (pure):** `streams_config` load/save round-trip; all five `merge` rules
   (add-valid, add-invalid, existing-now-invalid, existing-valid-preserved,
-  existing-unprobed-untouched).
+  existing-unprobed-untouched). `mediamtx_config.build` — auth present vs. absent, and
+  creds containing YAML-special characters (`'`, `:`, etc.) round-trip safely.
 - **Live (per AGENTS.md):** `relay parse` then `relay run` against the device; channel 3
   is the known-good test channel. Verify multiple concurrent RealPlay sessions stream
   simultaneously off one login.
