@@ -55,12 +55,12 @@ def probe_stream(client: DahuaClient, channel: int, stream: str, seconds: float)
                 got.set()
 
     try:
-        client.start_realplay(channel, STREAM_TYPES[stream], on_raw)
+        handle = client.start_realplay(channel, STREAM_TYPES[stream], on_raw)
     except Exception as e:
         log.info("ch%s %s: cannot start (%s)", channel, stream, e)
         return ProbeResult(channel, stream, False, None, 0, 0)
     got.wait(timeout=seconds)
-    client.stop_realplay()
+    client.stop_realplay(handle)
     ok = parser.codec is not None
     w, h = parser.resolution
     return ProbeResult(channel, stream, ok, parser.codec, w, h)

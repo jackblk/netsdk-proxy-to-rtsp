@@ -24,6 +24,7 @@ def cmd_stream(cfg: Config, args):
     client.login(cfg.host, cfg.port, cfg.username, cfg.password)
     pipeline.start()
     client.start_realplay(args.channel, STREAM_TYPES[args.stream], pipeline.on_raw)
+    # cleanup() stops all sessions on shutdown, so the handle isn't tracked here.
     log.info("Streaming ch%s %s (RTSP auth %s)", args.channel, args.stream,
              "enabled" if cfg.rtsp_auth_enabled else "disabled")
     log.info("Stream ready — view at: %s", cfg.viewer_url(args.name))

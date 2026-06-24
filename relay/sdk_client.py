@@ -1,7 +1,7 @@
 """Thin wrapper over the Dahua NetSDK for headless live preview."""
 import ctypes
 import logging
-from typing import Callable, Optional
+from typing import Callable
 
 import relay  # noqa: F401  (sys.path bootstrap so NetSDK imports resolve)
 
@@ -30,12 +30,12 @@ class DahuaClient:
     def __init__(self):
         self._sdk = NetClient()           # singleton; loads .so libs
         self._login_id = 0
-        self._realplay_id = 0
         self._channel_count = 0
         # Hold strong refs so ctypes callbacks are not garbage-collected.
         self._disconnect_cb = fDisConnect(self._on_disconnect)
-        self._realdata_cb: Optional[fRealDataCallBackEx2] = None
-        self._on_raw: Optional[RawDataHandler] = None
+        # One callback object, registered for every RealPlay; dispatch by handle.
+        self._realdata_cb = fRealDataCallBackEx2(self._raw_trampoline)
+        self._handlers: dict[int, RawDataHandler] = {}
 
     # --- lifecycle ---
     def init(self):
@@ -65,25 +65,26 @@ class DahuaClient:
     def channel_count(self) -> int:
         return self._channel_count
 
-    def start_realplay(self, channel: int, play_type: int, on_raw: RawDataHandler):
-        """Start headless preview and route raw stream bytes to on_raw."""
-        self._realplay_id = self._sdk.RealPlayEx(self._login_id, channel, 0, play_type)
-        if self._realplay_id == 0:
+    def start_realplay(self, channel: int, play_type: int, on_raw: RawDataHandler) -> int:
+        """Start a headless preview session; return its handle. May be called many times."""
+        handle = self._sdk.RealPlayEx(self._login_id, channel, 0, play_type)
+        if handle == 0:
             raise RuntimeError(f"RealPlayEx failed for channel={channel} play_type={play_type}")
-        self._on_raw = on_raw
-        self._realdata_cb = fRealDataCallBackEx2(self._raw_trampoline)
+        self._handlers[handle] = on_raw
         ok = self._sdk.SetRealDataCallBackEx2(
-            self._realplay_id, self._realdata_cb, 0, EM_REALDATA_FLAG.RAW_DATA
+            handle, self._realdata_cb, 0, EM_REALDATA_FLAG.RAW_DATA
         )
         if not ok:
+            self._sdk.StopRealPlayEx(handle)
+            del self._handlers[handle]
             raise RuntimeError("SetRealDataCallBackEx2 failed")
-        log.info("RealPlay started: channel=%s play_type=%s", channel, play_type)
+        log.info("RealPlay started: handle=%s channel=%s play_type=%s", handle, channel, play_type)
+        return handle
 
-    def stop_realplay(self):
-        if self._realplay_id:
-            self._sdk.StopRealPlayEx(self._realplay_id)
-            self._realplay_id = 0
-            self._realdata_cb = None
+    def stop_realplay(self, handle: int):
+        if handle and handle in self._handlers:
+            self._sdk.StopRealPlayEx(handle)
+            del self._handlers[handle]
 
     def logout(self):
         if self._login_id:
@@ -91,18 +92,23 @@ class DahuaClient:
             self._login_id = 0
 
     def cleanup(self):
-        self.stop_realplay()
+        for handle in list(self._handlers):
+            self._sdk.StopRealPlayEx(handle)
+        self._handlers.clear()
         self.logout()
         self._sdk.Cleanup()
 
     # --- ctypes callbacks ---
     def _raw_trampoline(self, lRealHandle, dwDataType, pBuffer, dwBufSize, param, dwUser):
-        # dwDataType == 0 => raw (DHAV) stream bytes.
-        if dwDataType != 0 or not self._on_raw or dwBufSize <= 0:
+        # dwDataType == 0 => raw (DHAV) stream bytes (video+audio multiplexed).
+        if dwDataType != 0 or dwBufSize <= 0:
+            return
+        handler = self._handlers.get(lRealHandle)
+        if handler is None:
             return
         data = ctypes.string_at(pBuffer, dwBufSize)
         try:
-            self._on_raw(data)
+            handler(data)
         except Exception:                       # never let an exception cross into the SDK
             log.exception("raw data handler error")
 
