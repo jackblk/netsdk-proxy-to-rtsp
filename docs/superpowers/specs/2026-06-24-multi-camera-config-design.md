@@ -130,11 +130,21 @@ to `metadata.codec` / `metadata.resolution`. Uses the new handle-based
 
 ### Dependency
 
-- `pyproject.toml`: add `pyyaml`.
+- `pyproject.toml`: `pyyaml` already added and `uv sync`'d by the maintainer — no action.
 
 ## Deploy changes
 
-- `docker-compose.yml`: `command: ["run"]` (was a single `stream …` invocation).
+- `deploy/Dockerfile`: change default `CMD ["parse"]` → `CMD ["run"]`, so the container
+  runs the multi-camera daemon off `streams.yml` by default.
+- `docker-compose.yml`:
+  - Use the default command (`run` → `streams.yml`); the explicit single-stream
+    `command: ["stream", …]` is kept only as a **commented-out** example.
+  - **Mount the config** so it's host-editable without a rebuild:
+    `volumes: ["./streams.yml:/app/streams.yml"]` (WORKDIR is `/app`, so the daemon's
+    default `streams.yml` resolves here).
+  - **Footgun to document:** the host `./streams.yml` must exist before `up`, or Docker
+    creates a *directory* at the mount point. Generate it first with `relay parse`
+    (or `touch streams.yml`).
 - `deploy/entrypoint.sh`: **no change** — it already forwards `"$@"` to `python -m relay`.
 - `deploy/mediamtx.yml`: **no change** — MediaMTX auto-creates paths on publish, and the
   existing optional auth block already governs all paths.
