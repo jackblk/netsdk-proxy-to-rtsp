@@ -23,10 +23,10 @@ Dahua device ──NetSDK──▶ relay ──raw DHAV──▶ ffmpeg -f dhav 
   - [pipeline.py](relay/pipeline.py) — wires callback → bounded queue → ffmpeg (forwards raw DHAV bytes; backpressure: drop-oldest).
   - [manager.py](relay/manager.py) — `StreamManager`: the `run` daemon. One login, N concurrent `StreamPipeline`s (one ffmpeg each), always-on; a per-stream start failure is logged and skipped.
   - [streams_config.py](relay/streams_config.py) — pure `StreamEntry` + `load`/`save`/`merge` for `streams.yml`. No SDK/ffmpeg deps; `merge` is non-destructive (see Commands). Unit-tested.
-  - [mediamtx_config.py](relay/mediamtx_config.py) — pure `build()` + CLI that generates the runtime MediaMTX config (rtspAddress + optional auth) via PyYAML. No SDK deps; used by the entrypoint.
+  - [mediamtx_config.py](relay/mediamtx_config.py) — pure `build()` + CLI that generates the runtime MediaMTX config (rtspAddress + optional auth) via PyYAML; when `ON_DEMAND` is set it also emits a `runOnDemand` path per enabled stream pointing at `relay serve`. No SDK deps; used by the entrypoint.
   - [playlist.py](relay/playlist.py) — pure `build_m3u8()`: (name, url) pairs → M3U8 text. `run` writes `output.m3u8` (next to the config) so a player opens all streams at once.
   - [probe.py](relay/probe.py) — `parse` mode: probe channels×streams → `ProbeResult`s (merged into `streams.yml` by `streams_config`).
-  - [__main__.py](relay/__main__.py) — CLI: `run`, `stream`, and `parse` subcommands, signal handling.
+  - [__main__.py](relay/__main__.py) — CLI: `run`, `stream`, `serve`, and `parse` subcommands, signal handling. (`serve <name>` streams one config entry by name; used by MediaMTX `runOnDemand`.)
 - `NetSDK/` — Dahua SDK (Python ctypes bindings + `Libs/linux64/*.so`). **Proprietary,
   NOT committed** (only its `README.md` + `setup.sh` are tracked; SDK files are git-ignored).
   Setup instructions live in [NetSDK/README.md](NetSDK/README.md). Do not edit the SDK.
@@ -66,6 +66,9 @@ enable RTSP auth: when **both** are set, the entrypoint adds a MediaMTX `authInt
 block requiring those creds to publish *and* view, and the proxy embeds them (URL-encoded)
 in its publish/viewer URLs (`Config.publish_url`/`viewer_url`). Unset → open access.
 
+`ON_DEMAND` (truthy → `Config.on_demand`) flips the whole deployment to on-demand mode
+(see the gotcha below); unset/false is always-on, the default.
+
 ## Non-obvious gotchas (learned the hard way)
 
 - **DHAV is demuxed by ffmpeg, not by us.** The `RAW_DATA` callback yields Dahua's DHAV
@@ -91,6 +94,12 @@ in its publish/viewer URLs (`Config.publish_url`/`viewer_url`). Unset → open a
   project root on `sys.path` so `from NetSDK.NetSDK import NetClient` resolves.
 - **Process-tree footgun when testing**: `pkill -f "relay stream"` also matches the shell
   running it — don't. Target exact pids.
+- **On-demand mode** (`ON_DEMAND=true`): MediaMTX `runOnDemand` spawns `relay serve <name>`
+  per stream on first view (its own login) and SIGINTs it ~10s after the last viewer. In
+  this mode `cmd_run` does **not** start the always-on `StreamManager` — it only writes
+  `output.m3u8` and idles as the foreground/signal process; MediaMTX is the engine. The
+  `runOnDemand` command (built in `mediamtx_config`) is a cwd-independent `uv run --frozen
+  --directory <project> ... relay serve $MTX_PATH`. Always-on is the default.
 - **Viewer URL vs. bind address**: `TARGET_HOST` is MediaMTX's bind/advertise address, so
   it's usually `0.0.0.0` — which a player can't connect to. `Config.viewer_host` therefore
   rewrites `0.0.0.0`/`::`/`""` to `localhost` for logged viewer URLs and `output.m3u8`

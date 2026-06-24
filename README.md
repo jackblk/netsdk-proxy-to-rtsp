@@ -86,6 +86,15 @@ vlc config/output.m3u8
 ffplay -rtsp_transport tcp rtsp://127.0.0.1:8554/cam3-main
 ```
 
+For **on-demand** mode locally, generate the MediaMTX config so the `runOnDemand` paths
+exist, then run both with `ON_DEMAND=true` (start `mediamtx` from the repo root):
+```bash
+ON_DEMAND=true uv run python -m relay.mediamtx_config \
+  --base deploy/mediamtx.yml --out /tmp/mtx.yml --streams-config config/streams.yml
+mediamtx /tmp/mtx.yml
+ON_DEMAND=true uv run python -m relay run
+```
+
 ## Docker
 ```bash
 docker compose up --build        # runs `relay run` against the mounted streams.yml
@@ -111,6 +120,12 @@ is committed; the generated files are git-ignored.
 - `run [--config config/streams.yml]` — logs in once and publishes **every
   `enable: true` stream** in the config, each at `rtsp://<host>:<TARGET_PORT>/<name>`,
   and writes `output.m3u8` (a playlist of all published streams) next to the config.
+  Set `ON_DEMAND=true` to switch to **on-demand** mode: streams are not started up
+  front; instead each enabled stream is pulled from the device only while a viewer is
+  connected (via MediaMTX's `runOnDemand`) and is torn down ~10s after the last viewer
+  disconnects. `output.m3u8` still lists every enabled stream — opening one triggers it.
+- `serve <name> [--config config/streams.yml]` — serves a single stream by name
+  (resolved from the config). Invoked by MediaMTX's `runOnDemand`; not usually run by hand.
 - `stream --channel N --stream main|sub|sub2 --name <path>` — serves one ad-hoc
   channel/stream without a config file.
 

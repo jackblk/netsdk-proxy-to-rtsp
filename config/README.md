@@ -19,5 +19,10 @@ Contents (both generated, both git-ignored):
   (`vlc config/output.m3u8`) to watch all streams at once instead of copy-pasting
   URLs from the logs.
 
+With `ON_DEMAND=true` in `.env`, the enabled streams become lazy — each is pulled from
+the device only while a viewer is connected (and torn down ~10s after the last leaves)
+instead of running continuously. `output.m3u8` still lists every enabled stream; opening
+one starts it.
+
 Only this README is committed — it keeps the directory present so the
 `./config` bind mount has somewhere to land on a fresh checkout.
