@@ -134,11 +134,11 @@ to `metadata.codec` / `metadata.resolution`. Uses the new handle-based
 
 ## Deploy changes
 
-- `deploy/Dockerfile`: change default `CMD ["parse"]` → `CMD ["run"]`, so the container
-  runs the multi-camera daemon off `streams.yml` by default.
+- `deploy/Dockerfile`: **no change** — keeps `CMD ["parse"]` as the image default.
 - `docker-compose.yml`:
-  - Use the default command (`run` → `streams.yml`); the explicit single-stream
-    `command: ["stream", …]` is kept only as a **commented-out** example.
+  - Set `command: ["run"]` so compose defaults to the multi-camera daemon
+    (`run` → `streams.yml`). The single-stream `command: ["stream", …]` invocation is
+    kept only as a **commented-out** example.
   - **Mount the config** so it's host-editable without a rebuild:
     `volumes: ["./streams.yml:/app/streams.yml"]` (WORKDIR is `/app`, so the daemon's
     default `streams.yml` resolves here).
