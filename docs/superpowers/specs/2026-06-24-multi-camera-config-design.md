@@ -169,6 +169,8 @@ indirection (`rtspAddress` is written directly into the generated file).
   `python -m relay`.
 - `deploy/mediamtx.yml`: **no change** — MediaMTX auto-creates paths on publish, and the
   existing optional auth block already governs all paths.
+- `.gitignore`: add `streams.yml` (per-deployment config, like the already-ignored
+  `streams.txt` / `.env`).
 
 ## Error handling
 
