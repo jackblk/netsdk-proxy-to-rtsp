@@ -8,6 +8,7 @@ NetSDK/*
 __pycache__/
 *.pyc
 streams.txt
+streams.yml
 *.dhav
 tests/fixtures/*.dhav
 !tests/fixtures/.gitkeep

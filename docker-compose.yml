@@ -7,8 +7,11 @@ services:
     env_file: .env
     ports:
       - "${TARGET_PORT:-8554}:${TARGET_PORT:-8554}"
+    volumes:
+      # Host-editable stream config. Must exist before `up` (run `relay parse`
+      # or `touch streams.yml`) or Docker will create a directory here.
+      - ./streams.yml:/app/streams.yml
     restart: unless-stopped
-    # Override for stream mode, e.g.:
+    command: ["run"]
+    # One-off single stream instead of the config-driven daemon:
     # command: ["stream", "--channel", "3", "--stream", "main", "--name", "cam3-main"]
-    command:
-      ["stream", "--channel", "2", "--stream", "main", "--name", "cam2-main"]

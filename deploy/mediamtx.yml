@@ -1,5 +1,6 @@
-# Minimal MediaMTX config: accept published streams on any path.
-# The RTSP listen port is overridden at runtime by MTX_RTSPADDRESS (see entrypoint.sh).
+# Minimal MediaMTX config base: accept published streams on any path.
+# At runtime, relay.mediamtx_config sets rtspAddress (from TARGET_PORT) and, when
+# TARGET_USERNAME/TARGET_PASSWORD are set, appends an authInternalUsers block.
 logLevel: info
 rtspAddress: :8554
 paths:

@@ -1,40 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# RTSP port: MediaMTX listens here, the proxy publishes here, compose exposes it.
-RTSP_PORT="${TARGET_PORT:-8554}"
-export MTX_RTSPADDRESS=":${RTSP_PORT}"
-
-# Build the runtime MediaMTX config from the committed base. When RTSP credentials
-# are provided, append an auth block so MediaMTX requires them to publish AND view;
-# without them, behaviour is unchanged (open access).
+# Build the runtime MediaMTX config from the committed base using PyYAML
+# (rtspAddress + optional auth block from TARGET_* env). No shell string-munging.
 MTX_CONFIG=/tmp/mediamtx.runtime.yml
-cp /app/deploy/mediamtx.yml "$MTX_CONFIG"
-
-if [ -n "${TARGET_USERNAME:-}" ] && [ -n "${TARGET_PASSWORD:-}" ]; then
-  # Single-quote for YAML so numeric/special-char values are treated as strings;
-  # YAML escapes an embedded single quote by doubling it.
-  yaml_user="'${TARGET_USERNAME//\'/\'\'}'"
-  yaml_pass="'${TARGET_PASSWORD//\'/\'\'}'"
-  cat >> "$MTX_CONFIG" <<EOF
-authInternalUsers:
-  - user: ${yaml_user}
-    pass: ${yaml_pass}
-    ips: []
-    permissions:
-      - action: publish
-      - action: read
-  - user: any
-    ips: ['127.0.0.1', '::1']
-    permissions:
-      - action: api
-      - action: metrics
-      - action: pprof
-EOF
-  echo "entrypoint: RTSP authentication enabled for user '${TARGET_USERNAME}'"
-else
-  echo "entrypoint: RTSP authentication disabled (TARGET_USERNAME/TARGET_PASSWORD not set)"
-fi
+/app/.venv/bin/python -m relay.mediamtx_config \
+  --base /app/deploy/mediamtx.yml --out "$MTX_CONFIG"
 
 # Start MediaMTX (RTSP server) in the background.
 /usr/local/bin/mediamtx "$MTX_CONFIG" &
