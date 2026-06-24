@@ -1,5 +1,9 @@
+import pytest
+
 import relay  # noqa: F401  (path bootstrap)
 from relay.config import Config, STREAM_TYPES
+
+BASE = {"HOST": "h", "USERNAME": "u", "PASSWORD": "p"}
 
 
 def test_from_env_reads_all_fields():
@@ -78,6 +82,23 @@ def test_auth_disabled_if_only_username_set():
     cfg = Config.from_env({"HOST": "h", "USERNAME": "u", "PASSWORD": "p",
                            "TARGET_USERNAME": "bb"})
     assert not cfg.rtsp_auth_enabled
+
+
+@pytest.mark.parametrize("val", ["1", "true", "TRUE", "yes", "Yes", "on"])
+def test_on_demand_truthy(val):
+    cfg = Config.from_env({**BASE, "ON_DEMAND": val})
+    assert cfg.on_demand is True
+
+
+@pytest.mark.parametrize("val", ["", "0", "false", "no", "off", "nope"])
+def test_on_demand_falsy(val):
+    cfg = Config.from_env({**BASE, "ON_DEMAND": val})
+    assert cfg.on_demand is False
+
+
+def test_on_demand_unset_defaults_false():
+    cfg = Config.from_env(BASE)
+    assert cfg.on_demand is False
 
 
 def test_stream_type_play_values():

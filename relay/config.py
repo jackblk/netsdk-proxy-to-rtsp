@@ -5,6 +5,12 @@ from urllib.parse import quote
 # Logical stream name -> SDK_RealPlayType value (verified against SDK_Enum.py).
 STREAM_TYPES = {"main": 0, "sub": 3, "sub2": 4}
 
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _is_truthy(val: str) -> bool:
+    return (val or "").strip().lower() in _TRUTHY
+
 
 @dataclass(frozen=True)
 class Config:
@@ -18,6 +24,7 @@ class Config:
     # to publish and to view, and the proxy publishes using them.
     target_username: str = ""
     target_password: str = ""
+    on_demand: bool = False
 
     @classmethod
     def from_env(cls, env: dict) -> "Config":
@@ -33,6 +40,7 @@ class Config:
             target_port=int(env.get("TARGET_PORT") or 8554),
             target_username=env.get("TARGET_USERNAME") or "",
             target_password=env.get("TARGET_PASSWORD") or "",
+            on_demand=_is_truthy(env.get("ON_DEMAND", "")),
         )
 
     @property
